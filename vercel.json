@@ -2,9 +2,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/**/*.js": {
-      "runtime": "edge"
-    }
+    "api/**/*.js": {}
   },
   "headers": [
     {
