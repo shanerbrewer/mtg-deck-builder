@@ -11,8 +11,8 @@ import { Redis } from '@upstash/redis';
 // Redis is lazily instantiated — this module is safe to import even when
 // env vars are absent (the client will simply throw on first use).
 export const redis = new Redis({
-  url:   process.env.UPSTASH_REDIS_REST_URL   ?? '',
-  token: process.env.UPSTASH_REDIS_REST_TOKEN ?? '',
+  url:   process.env.KV_REST_API_URL   ?? process.env.UPSTASH_REDIS_REST_URL   ?? '',
+  token: process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN ?? '',
 });
 
 // ── Key helpers ──────────────────────────────────────────────────
