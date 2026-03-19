@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MTG Commander Deck Builder</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <h1 class="site-title">
+        <span class="title-icon">&#9670;</span>
+        MTG Commander Deck Builder
+      </h1>
+      <div class="header-center">
+        <span id="deck-name-display" class="deck-name"></span>
+        <span id="card-count" class="card-count"></span>
+      </div>
+      <!-- Auth widget — hidden until session check completes -->
+      <div class="header-auth" id="header-auth" hidden>
+        <button class="btn btn-secondary btn-sm" id="auth-signin-btn" hidden>
+          Sign In with GitHub
+        </button>
+        <span class="auth-email" id="auth-user-email" hidden></span>
+        <button class="btn btn-ghost btn-sm" id="auth-signout-btn" hidden>
+          Sign Out
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-layout">
+
+    <!-- Left Sidebar: Decklist Input -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2>Decklist</h2>
+        <button class="btn-icon" id="toggle-sidebar" title="Collapse sidebar" aria-label="Toggle sidebar">&#8249;</button>
+      </div>
+
+      <div class="sidebar-content">
+        <div class="input-group">
+          <label for="deck-name-input">Deck Name</label>
+          <input
+            type="text"
+            id="deck-name-input"
+            placeholder="My Commander Deck"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+
+        <div class="input-group">
+          <label for="decklist-textarea">
+            Paste Decklist
+            <span class="label-hint">1 Card Name per line</span>
+          </label>
+          <textarea
+            id="decklist-textarea"
+            rows="18"
+            placeholder="Commander (1)&#10;1 Atraxa, Praetors' Voice&#10;&#10;Deck (99)&#10;1 Sol Ring&#10;1 Command Tower&#10;..."
+            spellcheck="false"
+          ></textarea>
+        </div>
+
+        <div class="upload-row">
+          <label class="btn btn-secondary btn-file" for="file-upload">
+            &#8593; Upload .txt
+          </label>
+          <input type="file" id="file-upload" accept=".txt,.dec,.mwdeck" hidden />
+        </div>
+
+        <button class="btn btn-primary" id="load-deck-btn">Load Deck</button>
+
+        <div id="parse-errors" class="error-box" hidden></div>
+
+        <!-- Cloud save — only shown when signed in -->
+        <div id="cloud-save-row" class="cloud-save-row" hidden>
+          <button class="btn btn-secondary" id="save-deck-btn">
+            &#9729; Save to Cloud
+          </button>
+          <span id="save-status" class="save-status"></span>
+        </div>
+
+        <!-- Saved decks — only shown when signed in -->
+        <div id="saved-decks-section" class="saved-decks-section" hidden>
+          <div class="saved-decks-header">
+            <span class="saved-decks-title">Cloud Decks</span>
+          </div>
+          <div id="saved-decks-list" class="saved-decks-list"></div>
+        </div>
+
+        <div class="sidebar-footer">
+          <button class="btn btn-ghost btn-sm" id="clear-deck-btn">Clear Deck</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Sidebar collapsed tab -->
+    <button class="sidebar-tab" id="sidebar-tab" hidden aria-label="Expand sidebar">&#8250;</button>
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content">
+
+      <!-- Empty state -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">&#9672;</div>
+        <p>Paste a decklist on the left and click <strong>Load Deck</strong> to get started.</p>
+        <p class="empty-hint">Supports MTGO, Moxfield, and plain <code>1 Card Name</code> formats.</p>
+      </div>
+
+      <!-- Loading state -->
+      <div id="loading-state" class="loading-state" hidden>
+        <div class="spinner"></div>
+        <p id="loading-text">Fetching cards from Scryfall...</p>
+      </div>
+
+      <!-- Tab bar — only shown once a deck is loaded -->
+      <div id="main-tabs" class="main-tabs" hidden>
+        <button class="main-tab main-tab--active" id="tab-cards" data-tab="cards">Cards</button>
+        <button class="main-tab" id="tab-analytics" data-tab="analytics">Mana Analytics</button>
+      </div>
+
+      <!-- Cards tab content -->
+      <div id="cards-panel">
+        <div id="not-found-banner" class="warning-banner" hidden></div>
+
+        <section id="commander-section" class="card-section" hidden>
+          <h3 class="section-label">Commander</h3>
+          <div class="card-grid" id="commander-grid"></div>
+        </section>
+
+        <section id="deck-section" class="card-section" hidden>
+          <h3 class="section-label">
+            Deck <span id="deck-section-count" class="section-count"></span>
+          </h3>
+          <div class="card-grid" id="deck-grid"></div>
+        </section>
+      </div>
+
+      <!-- Analytics tab content -->
+      <div id="analytics-panel" class="analytics-panel" hidden></div>
+
+    </main>
+  </div>
+
+  <!-- Card Detail Modal -->
+  <div id="card-modal" class="modal-backdrop" hidden aria-modal="true" role="dialog">
+    <div class="modal-container">
+      <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+
+      <div class="modal-body">
+        <div class="modal-image-col">
+          <img id="modal-card-img" src="" alt="" class="modal-card-img" />
+          <button class="btn btn-ghost btn-sm flip-btn" id="modal-flip-btn" hidden>
+            &#8635; Flip Card
+          </button>
+        </div>
+
+        <div class="modal-info-col">
+          <div class="modal-card-header">
+            <h2 id="modal-card-name" class="modal-name"></h2>
+            <span id="modal-mana-cost" class="modal-mana"></span>
+          </div>
+          <p id="modal-type-line" class="modal-type"></p>
+          <div id="modal-oracle-text" class="modal-oracle"></div>
+          <div id="modal-stats" class="modal-stats"></div>
+          <div id="modal-flavor" class="modal-flavor"></div>
+          <div id="modal-set-info" class="modal-set-info"></div>
+          <div id="modal-legality" class="modal-legality"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
