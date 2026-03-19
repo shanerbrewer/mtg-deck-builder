@@ -24,6 +24,7 @@ export function getAuthConfig() {
 
     secret:    process.env.AUTH_SECRET,
     trustHost: true,
+    basePath:  '/api/auth',
 
     // JWT strategy: session is encoded in a signed httpOnly cookie.
     // No session table or Redis needed for the auth layer itself.
