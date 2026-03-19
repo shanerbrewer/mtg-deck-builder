@@ -2,16 +2,13 @@
  * main.js
  *
  * Application entry point — wires together parsing, storage, API, UI,
- * authentication, cloud storage, and analytics.
+ * and analytics.
  */
 
 import { parseDeckList, uniqueNames } from './deckParser.js';
 import { saveDeck, loadDeckText, loadDeckName, clearDeck, saveCardCache, loadCardCache } from './deckStorage.js';
 import { fetchCardsByNames } from './scryfallApi.js';
 import { renderCardGrid, openCardModal, closeCardModal } from './ui.js';
-import { initSession, onSessionChange, signIn, signOut } from './authClient.js';
-import { listDecks, loadCloudDeck, createCloudDeck, updateCloudDeck, deleteCloudDeck } from './cloudStorage.js';
-import { renderSavedDecks } from './savedDecksUi.js';
 import { computeAnalytics } from './analytics.js';
 import { renderAnalytics } from './analyticsUi.js';
 
@@ -41,21 +38,6 @@ const sidebar          = document.getElementById('sidebar');
 const toggleSidebar    = document.getElementById('toggle-sidebar');
 const sidebarTab       = document.getElementById('sidebar-tab');
 
-// Auth DOM refs
-const headerAuth       = document.getElementById('header-auth');
-const authSigninBtn    = document.getElementById('auth-signin-btn');
-const authUserEmail    = document.getElementById('auth-user-email');
-const authSignoutBtn   = document.getElementById('auth-signout-btn');
-
-// Cloud save DOM refs
-const cloudSaveRow     = document.getElementById('cloud-save-row');
-const saveDeckBtn      = document.getElementById('save-deck-btn');
-const saveStatus       = document.getElementById('save-status');
-
-// Saved decks DOM refs
-const savedDecksSection = document.getElementById('saved-decks-section');
-const savedDecksList    = document.getElementById('saved-decks-list');
-
 // Tab DOM refs
 const mainTabs         = document.getElementById('main-tabs');
 const tabCards         = document.getElementById('tab-cards');
@@ -66,123 +48,7 @@ const analyticsPanel   = document.getElementById('analytics-panel');
 // ── State ────────────────────────────────────────────────────────
 let cardCache          = loadCardCache(); // Map<name, scryfallCard>
 let currentParsed      = null;            // last successfully loaded parsed deck
-let currentCloudDeckId = null;            // id of the currently loaded cloud deck
 let activeTab          = 'cards';
-
-// ── Auth initialisation ───────────────────────────────────────────
-authSigninBtn?.addEventListener('click', () => signIn());
-authSignoutBtn?.addEventListener('click', () => signOut());
-
-onSessionChange(handleAuthStateChange);
-initSession(); // async — fires onSessionChange when complete
-
-async function handleAuthStateChange(session) {
-  if (headerAuth) headerAuth.hidden = false; // always visible once session resolves
-
-  if (session?.user) {
-    // Signed in
-    if (authSigninBtn)  authSigninBtn.hidden  = true;
-    if (authUserEmail) {
-      authUserEmail.textContent = session.user.email ?? session.user.name ?? '';
-      authUserEmail.hidden      = false;
-    }
-    if (authSignoutBtn) authSignoutBtn.hidden = false;
-    if (cloudSaveRow)   cloudSaveRow.hidden   = false;
-    if (savedDecksSection) savedDecksSection.hidden = false;
-    await refreshSavedDecks();
-  } else {
-    // Signed out
-    if (authSigninBtn)  authSigninBtn.hidden  = false;
-    if (authUserEmail) {
-      authUserEmail.textContent = '';
-      authUserEmail.hidden      = true;
-    }
-    if (authSignoutBtn) authSignoutBtn.hidden = true;
-    if (cloudSaveRow)   cloudSaveRow.hidden   = true;
-    if (savedDecksSection) savedDecksSection.hidden = true;
-    if (savedDecksList)  savedDecksList.textContent = '';
-  }
-}
-
-async function refreshSavedDecks() {
-  const decks = await listDecks();
-  if (!decks || !savedDecksList) return;
-  renderSavedDecks(savedDecksList, decks, handleLoadCloudDeck, handleDeleteCloudDeck);
-}
-
-async function handleLoadCloudDeck(deckId) {
-  const deck = await loadCloudDeck(deckId);
-  if (!deck) return;
-  currentCloudDeckId = deckId;
-  deckNameInput.value = deck.name ?? '';
-  decklistTextarea.value = deck.text ?? '';
-  deckNameDisplay.textContent = deck.name ?? '';
-  saveDeck(deck.text ?? '', deck.name ?? '');
-  await loadDeck();
-}
-
-async function handleDeleteCloudDeck(deckId) {
-  if (!confirm('Delete this saved deck from the cloud?')) return;
-  const ok = await deleteCloudDeck(deckId);
-  if (ok) {
-    if (currentCloudDeckId === deckId) currentCloudDeckId = null;
-    await refreshSavedDecks();
-  }
-}
-
-// ── Cloud save ────────────────────────────────────────────────────
-saveDeckBtn?.addEventListener('click', async () => {
-  const text = decklistTextarea.value.trim();
-  const name = (deckNameInput.value.trim() || 'Untitled Deck');
-  if (!text) {
-    showSaveStatus('Nothing to save.', false);
-    return;
-  }
-
-  saveDeckBtn.disabled = true;
-  showSaveStatus('Saving…', null);
-
-  try {
-    if (currentCloudDeckId) {
-      const updated = await updateCloudDeck(currentCloudDeckId, { name, text });
-      if (updated) {
-        showSaveStatus('Saved!', true);
-      } else {
-        // Deck may have been deleted — create a new one
-        const created = await createCloudDeck(name, text);
-        if (created) {
-          currentCloudDeckId = created.id;
-          showSaveStatus('Saved!', true);
-        } else {
-          showSaveStatus('Save failed.', false);
-        }
-      }
-    } else {
-      const created = await createCloudDeck(name, text);
-      if (created) {
-        currentCloudDeckId = created.id;
-        showSaveStatus('Saved!', true);
-      } else {
-        showSaveStatus('Save failed.', false);
-      }
-    }
-    await refreshSavedDecks();
-  } finally {
-    saveDeckBtn.disabled = false;
-  }
-});
-
-function showSaveStatus(msg, ok) {
-  if (!saveStatus) return;
-  saveStatus.textContent = msg;
-  saveStatus.className = ok === true  ? 'save-status save-status--ok'
-                       : ok === false ? 'save-status save-status--err'
-                       :                'save-status';
-  saveStatus.hidden = false;
-  if (ok !== null) {
-    setTimeout(() => { saveStatus.hidden = true; }, 3000);
-  }
-}
 
 // ── Tab switching ─────────────────────────────────────────────────
 tabCards?.addEventListener('click', () => switchTab('cards'));
@@ -285,8 +151,7 @@ async function loadDeck() {
     return;
   }
 
-  // Save to localStorage immediately (deck text was already auto-saved, but
-  // ensure name is persisted before the async work starts)
+  // Save to localStorage immediately
   saveDeck(text, deckNameInput.value);
 
   const names = uniqueNames(parsed);
@@ -366,7 +231,6 @@ clearDeckBtn.addEventListener('click', () => {
   cardCountDisplay.textContent = '';
   cardCache = new Map();
   currentParsed = null;
-  currentCloudDeckId = null;
   setUIState('empty');
   notFoundBanner.hidden = true;
   hideParseErrors();
