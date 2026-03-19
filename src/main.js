@@ -42,6 +42,7 @@ const toggleSidebar    = document.getElementById('toggle-sidebar');
 const sidebarTab       = document.getElementById('sidebar-tab');
 
 // Auth DOM refs
+const headerAuth       = document.getElementById('header-auth');
 const authSigninBtn    = document.getElementById('auth-signin-btn');
 const authUserEmail    = document.getElementById('auth-user-email');
 const authSignoutBtn   = document.getElementById('auth-signout-btn');
@@ -76,6 +77,8 @@ onSessionChange(handleAuthStateChange);
 initSession(); // async — fires onSessionChange when complete
 
 async function handleAuthStateChange(session) {
+  if (headerAuth) headerAuth.hidden = false; // always visible once session resolves
+
   if (session?.user) {
     // Signed in
     if (authSigninBtn)  authSigninBtn.hidden  = true;
