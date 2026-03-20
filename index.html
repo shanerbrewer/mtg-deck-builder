@@ -19,13 +19,6 @@
         <span id="card-count" class="card-count"></span>
       </div>
 
-      <!-- Auth widget — hidden until session check resolves -->
-      <div class="header-auth" id="header-auth" hidden>
-        <button class="btn btn-secondary btn-sm" id="auth-signin-btn" hidden>Sign In with GitHub</button>
-        <span class="auth-email" id="auth-user-email" hidden></span>
-        <button class="btn btn-ghost btn-sm" id="auth-signout-btn" hidden>Sign Out</button>
-      </div>
-
     </div>
   </header>
 
@@ -73,19 +66,6 @@
         <button class="btn btn-primary" id="load-deck-btn">Load Deck</button>
 
         <div id="parse-errors" class="error-box" hidden></div>
-
-        <!-- Cloud save — shown only when signed in -->
-        <div class="cloud-save-row" id="cloud-save-row" hidden>
-          <button class="btn btn-secondary btn-sm" id="save-deck-btn">☁ Save to Cloud</button>
-        </div>
-
-        <!-- Saved decks — shown only when signed in -->
-        <div class="saved-decks-section" id="saved-decks-section" hidden>
-          <div class="saved-decks-header">
-            <span class="saved-decks-title">☁ Saved Decks</span>
-          </div>
-          <div class="saved-decks-list" id="saved-decks-list"></div>
-        </div>
 
         <div class="sidebar-footer">
           <button class="btn btn-ghost btn-sm" id="clear-deck-btn">Clear Deck</button>
