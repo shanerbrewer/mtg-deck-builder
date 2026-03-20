@@ -17,6 +17,15 @@ import {
   renderAiError,
   renderRecommendations,
 } from './recommendationsUi.js';
+import { onSessionChange, signIn, signOut } from './authClient.js';
+import {
+  listDecks,
+  loadCloudDeck,
+  createCloudDeck,
+  updateCloudDeck,
+  deleteCloudDeck,
+} from './cloudStorage.js';
+import { renderSavedDecks } from './savedDecksUi.js';
 
 // ── DOM refs ─────────────────────────────────────────────────────
 const deckNameInput    = document.getElementById('deck-name-input');
@@ -44,6 +53,18 @@ const sidebar          = document.getElementById('sidebar');
 const toggleSidebar    = document.getElementById('toggle-sidebar');
 const sidebarTab       = document.getElementById('sidebar-tab');
 
+// Auth DOM refs
+const headerAuth       = document.getElementById('header-auth');
+const authSigninBtn    = document.getElementById('auth-signin-btn');
+const authUserEmail    = document.getElementById('auth-user-email');
+const authSignoutBtn   = document.getElementById('auth-signout-btn');
+
+// Cloud storage DOM refs
+const cloudSaveRow     = document.getElementById('cloud-save-row');
+const saveDeckBtn      = document.getElementById('save-deck-btn');
+const savedDecksSection = document.getElementById('saved-decks-section');
+const savedDecksList   = document.getElementById('saved-decks-list');
+
 // Tab DOM refs
 const mainTabs         = document.getElementById('main-tabs');
 const tabCards         = document.getElementById('tab-cards');
@@ -59,6 +80,7 @@ let currentParsed      = null;            // last successfully loaded parsed dec
 let activeTab          = 'cards';
 let aiRecommendations  = null;            // cached AI result for current deck
 let aiFetching         = false;           // prevent duplicate in-flight requests
+let currentCloudDeckId = null;            // id of the cloud deck currently loaded (or null)
 
 // ── Tab switching ─────────────────────────────────────────────────
 tabCards?.addEventListener('click', () => switchTab('cards'));
@@ -81,6 +103,103 @@ function switchTab(tab) {
     } else if (currentParsed) {
       renderAiPrompt(aiPanel, fetchAiRecommendations);
     }
+  }
+}
+
+// ── Auth ──────────────────────────────────────────────────────────
+
+authSigninBtn?.addEventListener('click', signIn);
+authSignoutBtn?.addEventListener('click', signOut);
+
+onSessionChange(handleAuthStateChange);
+
+async function handleAuthStateChange(session) {
+  if (!headerAuth) return;
+  headerAuth.hidden = false;
+
+  if (session?.user) {
+    // Signed in
+    if (authSigninBtn)  authSigninBtn.hidden  = true;
+    if (authUserEmail)  { authUserEmail.textContent = session.user.email ?? session.user.name ?? ''; authUserEmail.hidden = false; }
+    if (authSignoutBtn) authSignoutBtn.hidden = false;
+    if (cloudSaveRow)   cloudSaveRow.hidden   = false;
+    if (savedDecksSection) savedDecksSection.hidden = false;
+    await refreshSavedDecks();
+  } else {
+    // Signed out
+    if (authSigninBtn)  authSigninBtn.hidden  = false;
+    if (authUserEmail)  { authUserEmail.textContent = ''; authUserEmail.hidden = true; }
+    if (authSignoutBtn) authSignoutBtn.hidden = true;
+    if (cloudSaveRow)   cloudSaveRow.hidden   = true;
+    if (savedDecksSection) savedDecksSection.hidden = true;
+    if (savedDecksList) savedDecksList.textContent = '';
+  }
+}
+
+async function refreshSavedDecks() {
+  if (!savedDecksList) return;
+  try {
+    const decks = await listDecks();
+    renderSavedDecks(savedDecksList, decks, handleLoadCloudDeck, handleDeleteCloudDeck);
+  } catch {
+    // Silently fail — user may not have KV set up yet
+  }
+}
+
+// ── Cloud save button ─────────────────────────────────────────────
+
+saveDeckBtn?.addEventListener('click', async () => {
+  const text     = decklistTextarea.value.trim();
+  const deckName = deckNameInput.value.trim();
+  if (!text) return;
+
+  const original = saveDeckBtn.textContent;
+  saveDeckBtn.textContent = 'Saving…';
+  saveDeckBtn.disabled = true;
+
+  try {
+    if (currentCloudDeckId) {
+      await updateCloudDeck(currentCloudDeckId, { name: deckName, text });
+    } else {
+      const res = await createCloudDeck(deckName || 'Untitled', text);
+      currentCloudDeckId = res.id;
+    }
+    saveDeckBtn.textContent = '✓ Saved';
+    await refreshSavedDecks();
+  } catch (e) {
+    saveDeckBtn.textContent = '✗ Error';
+    console.error('Cloud save failed:', e);
+  } finally {
+    setTimeout(() => {
+      saveDeckBtn.textContent = original;
+      saveDeckBtn.disabled = false;
+    }, 2000);
+  }
+});
+
+async function handleLoadCloudDeck(id) {
+  try {
+    const deck = await loadCloudDeck(id);
+    decklistTextarea.value  = deck.text;
+    deckNameInput.value     = deck.name;
+    deckNameDisplay.textContent = deck.name;
+    currentCloudDeckId = id;
+    saveDeck(deck.text, deck.name);
+    loadDeck();
+  } catch (e) {
+    console.error('Failed to load cloud deck:', e);
+    showParseErrors([`Could not load deck from cloud: ${e.message}`]);
+  }
+}
+
+async function handleDeleteCloudDeck(id) {
+  if (!confirm('Delete this saved deck from the cloud?')) return;
+  try {
+    await deleteCloudDeck(id);
+    if (currentCloudDeckId === id) currentCloudDeckId = null;
+    await refreshSavedDecks();
+  } catch (e) {
+    console.error('Failed to delete cloud deck:', e);
   }
 }
 
@@ -179,6 +298,9 @@ async function loadDeck() {
   // Invalidate cached AI recommendations when deck changes
   aiRecommendations = null;
   if (aiPanel) aiPanel.textContent = '';
+
+  // New deck load — detach from any cloud deck (it will need a fresh save)
+  currentCloudDeckId = null;
 
   const names = uniqueNames(parsed);
 
@@ -362,6 +484,7 @@ clearDeckBtn.addEventListener('click', () => {
   cardCountDisplay.textContent = '';
   cardCache = new Map();
   currentParsed = null;
+  currentCloudDeckId = null;
   setUIState('empty');
   notFoundBanner.hidden = true;
   hideParseErrors();
