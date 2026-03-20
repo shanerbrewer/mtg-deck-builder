@@ -7,6 +7,10 @@
     "build": "vite build",
     "preview": "vite preview"
   },
+  "dependencies": {
+    "ai": "^4.3.16",
+    "@ai-sdk/anthropic": "^1.2.12"
+  },
   "devDependencies": {
     "vite": "^6.2.0"
   }

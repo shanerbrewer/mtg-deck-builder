@@ -11,6 +11,12 @@ import { fetchCardsByNames } from './scryfallApi.js';
 import { renderCardGrid, openCardModal, closeCardModal } from './ui.js';
 import { computeAnalytics } from './analytics.js';
 import { renderAnalytics } from './analyticsUi.js';
+import {
+  renderAiPrompt,
+  renderAiLoading,
+  renderAiError,
+  renderRecommendations,
+} from './recommendationsUi.js';
 
 // ── DOM refs ─────────────────────────────────────────────────────
 const deckNameInput    = document.getElementById('deck-name-input');
@@ -42,24 +48,40 @@ const sidebarTab       = document.getElementById('sidebar-tab');
 const mainTabs         = document.getElementById('main-tabs');
 const tabCards         = document.getElementById('tab-cards');
 const tabAnalytics     = document.getElementById('tab-analytics');
+const tabAi            = document.getElementById('tab-ai');
 const cardsPanel       = document.getElementById('cards-panel');
 const analyticsPanel   = document.getElementById('analytics-panel');
+const aiPanel          = document.getElementById('ai-panel');
 
 // ── State ────────────────────────────────────────────────────────
 let cardCache          = loadCardCache(); // Map<name, scryfallCard>
 let currentParsed      = null;            // last successfully loaded parsed deck
 let activeTab          = 'cards';
+let aiRecommendations  = null;            // cached AI result for current deck
+let aiFetching         = false;           // prevent duplicate in-flight requests
 
 // ── Tab switching ─────────────────────────────────────────────────
 tabCards?.addEventListener('click', () => switchTab('cards'));
 tabAnalytics?.addEventListener('click', () => switchTab('analytics'));
+tabAi?.addEventListener('click', () => switchTab('ai'));
 
 function switchTab(tab) {
   activeTab = tab;
-  if (cardsPanel)    cardsPanel.hidden    = (tab !== 'cards');
+  if (cardsPanel)     cardsPanel.hidden     = (tab !== 'cards');
   if (analyticsPanel) analyticsPanel.hidden = (tab !== 'analytics');
+  if (aiPanel)        aiPanel.hidden        = (tab !== 'ai');
   tabCards?.classList.toggle('main-tab--active', tab === 'cards');
   tabAnalytics?.classList.toggle('main-tab--active', tab === 'analytics');
+  tabAi?.classList.toggle('main-tab--active', tab === 'ai');
+
+  // When switching to AI tab, show cached result or prompt
+  if (tab === 'ai' && aiPanel) {
+    if (aiRecommendations) {
+      renderRecommendations(aiPanel, aiRecommendations, fetchAiRecommendations);
+    } else if (currentParsed) {
+      renderAiPrompt(aiPanel, fetchAiRecommendations);
+    }
+  }
 }
 
 // ── Initialise from storage ───────────────────────────────────────
@@ -154,6 +176,10 @@ async function loadDeck() {
   // Save to localStorage immediately
   saveDeck(text, deckNameInput.value);
 
+  // Invalidate cached AI recommendations when deck changes
+  aiRecommendations = null;
+  if (aiPanel) aiPanel.textContent = '';
+
   const names = uniqueNames(parsed);
 
   try {
@@ -221,6 +247,50 @@ function renderAnalyticsPanelIfLoaded(parsed, cardMap) {
   renderAnalytics(analyticsPanel, data);
 }
 
+// ── AI Recommendations ────────────────────────────────────────────
+
+/**
+ * Fetch AI card recommendations from /api/deck/recommend and
+ * update the AI panel accordingly.
+ */
+async function fetchAiRecommendations() {
+  if (aiFetching || !currentParsed || !aiPanel) return;
+
+  const text     = decklistTextarea.value.trim();
+  const deckName = deckNameInput.value.trim();
+
+  aiFetching = true;
+  renderAiLoading(aiPanel);
+
+  try {
+    const res = await fetch('/api/deck/recommend', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text, deckName }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      const msg = data?.error ?? `Server error (${res.status}).`;
+      renderAiError(aiPanel, msg, fetchAiRecommendations);
+      return;
+    }
+
+    aiRecommendations = data;
+    renderRecommendations(aiPanel, data, fetchAiRecommendations);
+
+  } catch (err) {
+    renderAiError(
+      aiPanel,
+      'Could not reach the recommendations service. Check your network and try again.',
+      fetchAiRecommendations,
+    );
+  } finally {
+    aiFetching = false;
+  }
+}
+
 // ── Clear Deck ────────────────────────────────────────────────────
 clearDeckBtn.addEventListener('click', () => {
   if (!confirm('Clear your deck? This will remove the saved decklist.')) return;
@@ -235,6 +305,8 @@ clearDeckBtn.addEventListener('click', () => {
   notFoundBanner.hidden = true;
   hideParseErrors();
   if (analyticsPanel) analyticsPanel.textContent = '';
+  aiRecommendations = null;
+  if (aiPanel) aiPanel.textContent = '';
 });
 
 // ── Sidebar toggle ────────────────────────────────────────────────
