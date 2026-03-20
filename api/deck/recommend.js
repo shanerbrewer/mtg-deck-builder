@@ -75,7 +75,7 @@ Here is a Commander deck${nameHint}:
 
 ${text}
 
-Analyse this deck's strategy and identify 6 cards that would meaningfully improve it. For each recommendation, explain why the card fits the deck, what strategic role it fills, and which specific card already in the deck it should replace.`;
+Analyse this deck's strategy and identify cards that would meaningfully improve it. For each recommendation, explain why the card fits the deck, what strategic role it fills, and which specific card already in the deck it should replace.`;
 
     try {
       const { text: analysis } = await generateText({
@@ -113,7 +113,7 @@ Analyse this deck's strategy and identify 6 cards that would meaningfully improv
 }
 
 Requirements:
-- Exactly 6 entries in recommendations.
+- Include all recommendations from the analysis — do not add or remove any.
 - role must be one of the listed values; choose the closest match.
 - "replaces" is required for every entry — always include it.
 - Card names must be spelled exactly as they appear in the analysis.
@@ -126,7 +126,7 @@ ${analysis}`;
       const { text: rawJson } = await generateText({
         model:     anthropic('claude-haiku-4-5'),
         prompt,
-        maxTokens: 1024,
+        maxTokens: 1536,
       });
       result = parseJsonResponse(rawJson);
     } catch (err) {
