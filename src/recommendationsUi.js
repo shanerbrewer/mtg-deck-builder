@@ -123,13 +123,20 @@ export function renderAiPrompt(panelEl, onFetch) {
  * Show a loading spinner while waiting for the API.
  * @param {HTMLElement} panelEl
  */
-export function renderAiLoading(panelEl) {
+export function renderAiLoading(panelEl, message = 'Claude is analysing your deck…') {
+  // If already showing a loading state, just update the text in place
+  const existing = panelEl.querySelector('.ai-loading-text');
+  if (existing) {
+    existing.textContent = message;
+    return;
+  }
+
   panelEl.textContent = '';
 
   const wrapper  = el('div', 'ai-loading-wrapper');
   const spinner  = el('div', 'spinner');
   const text     = el('p', 'ai-loading-text');
-  text.textContent = 'Claude is analysing your deck…';
+  text.textContent = message;
 
   append(wrapper, [spinner, text]);
   panelEl.appendChild(wrapper);

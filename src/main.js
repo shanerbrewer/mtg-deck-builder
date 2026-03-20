@@ -261,25 +261,41 @@ async function fetchAiRecommendations() {
   const deckName = deckNameInput.value.trim();
 
   aiFetching = true;
-  renderAiLoading(aiPanel);
+  renderAiLoading(aiPanel, 'Claude is analysing your deck…');
 
   try {
-    const res = await fetch('/api/deck/recommend', {
+    // ── Pass 1: free-form analysis ──────────────────────────────────
+    const res1 = await fetch('/api/deck/recommend', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ text, deckName }),
+      body:    JSON.stringify({ pass: 1, text, deckName }),
     });
 
-    const data = await res.json();
+    const data1 = await res1.json();
 
-    if (!res.ok) {
-      const msg = data?.error ?? `Server error (${res.status}).`;
-      renderAiError(aiPanel, msg, fetchAiRecommendations);
+    if (!res1.ok) {
+      renderAiError(aiPanel, data1?.error ?? `Server error (${res1.status}).`, fetchAiRecommendations);
       return;
     }
 
-    aiRecommendations = data;
-    renderRecommendations(aiPanel, data, fetchAiRecommendations, handleAcceptRecommendation);
+    // ── Pass 2: convert prose to JSON ───────────────────────────────
+    renderAiLoading(aiPanel, 'Formatting recommendations…');
+
+    const res2 = await fetch('/api/deck/recommend', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ pass: 2, analysis: data1.analysis }),
+    });
+
+    const data2 = await res2.json();
+
+    if (!res2.ok) {
+      renderAiError(aiPanel, data2?.error ?? `Server error (${res2.status}).`, fetchAiRecommendations);
+      return;
+    }
+
+    aiRecommendations = data2;
+    renderRecommendations(aiPanel, data2, fetchAiRecommendations, handleAcceptRecommendation);
 
   } catch (err) {
     renderAiError(

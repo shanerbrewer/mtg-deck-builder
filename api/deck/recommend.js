@@ -1,16 +1,16 @@
 /**
  * POST /api/deck/recommend
  *
- * Two-pass Claude pipeline:
- *   1. Analysis prompt  — free-form deck evaluation and recommendations,
- *                         no formatting constraints so Claude can focus on quality.
- *   2. Conversion prompt — takes Claude's prose and converts it to the JSON
- *                          schema the UI expects, enforcing all constraints there.
+ * Two-pass pipeline — called twice by the client, each invocation runs one
+ * model call so neither hits the Edge Function timeout.
  *
- * Request body:  { "text": "...", "deckName": "optional" }
- * Response:      { theme, analysis, recommendations: [{ name, reason, role, replaces? }] }
+ * Pass 1 — analysis (request: { pass: 1, text, deckName? })
+ *   Model:   claude-opus-4-6
+ *   Returns: { analysis: "<prose>" }
  *
- * Requires ANTHROPIC_API_KEY environment variable.
+ * Pass 2 — JSON conversion (request: { pass: 2, analysis: "<prose>" })
+ *   Model:   claude-haiku-4-5  (formatting-only task, much faster)
+ *   Returns: { theme, analysis, recommendations: [{ name, reason, role, replaces? }] }
  */
 
 import { generateText } from 'ai';
@@ -30,7 +30,6 @@ export default async function handler(req) {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS });
   }
-
   if (req.method !== 'POST') {
     return error(405, 'Method not allowed. Use POST.');
   }
@@ -52,23 +51,25 @@ export default async function handler(req) {
     return error(400, 'Invalid JSON body.');
   }
 
-  const { text, deckName } = body ?? {};
-  if (typeof text !== 'string' || !text.trim()) {
-    return error(400, '`text` field is required and must be a non-empty string.');
-  }
-  if (text.length > MAX_BODY_BYTES) {
-    return error(413, '`text` is too long. Max 64 000 characters.');
-  }
-
-  const nameHint = (typeof deckName === 'string' && deckName.trim())
-    ? ` called "${deckName.trim().slice(0, 80)}"`
-    : '';
-
   const anthropic = createAnthropic({ apiKey });
+  const { pass } = body ?? {};
 
-  // ── Pass 1: free-form analysis ───────────────────────────────────
-  // No schema, no requirements list — Claude focuses entirely on the deck.
-  const analysisPrompt = `You are an expert Magic: The Gathering deck builder specialising in Commander/EDH.
+  // ── Pass 1: free-form analysis ────────────────────────────────────
+  if (pass === 1) {
+    const { text, deckName } = body;
+
+    if (typeof text !== 'string' || !text.trim()) {
+      return error(400, '`text` is required for pass 1.');
+    }
+    if (text.length > MAX_BODY_BYTES) {
+      return error(413, '`text` is too long. Max 64 000 characters.');
+    }
+
+    const nameHint = (typeof deckName === 'string' && deckName.trim())
+      ? ` called "${deckName.trim().slice(0, 80)}"`
+      : '';
+
+    const prompt = `You are an expert Magic: The Gathering deck builder specialising in Commander/EDH.
 
 Here is a Commander deck${nameHint}:
 
@@ -76,21 +77,27 @@ ${text}
 
 Analyse this deck's strategy and identify 6 cards that would meaningfully improve it. For each recommendation, explain why the card fits the deck, what strategic role it fills, and which card already in the deck it could replace (if there is a clear candidate).`;
 
-  let analysis;
-  try {
-    const { text: analysisText } = await generateText({
-      model:     anthropic('claude-opus-4-6'),
-      prompt:    analysisPrompt,
-      maxTokens: 2048,
-    });
-    analysis = analysisText;
-  } catch (err) {
-    return handleApiError(err);
+    try {
+      const { text: analysis } = await generateText({
+        model:     anthropic('claude-opus-4-6'),
+        prompt,
+        maxTokens: 2048,
+      });
+      return Response.json({ analysis }, { headers: CORS });
+    } catch (err) {
+      return handleApiError(err);
+    }
   }
 
-  // ── Pass 2: convert prose to JSON ────────────────────────────────
-  // Claude's only job here is extraction and formatting — all constraints live here.
-  const conversionPrompt = `Convert the following deck analysis into JSON. Respond with valid JSON only — no markdown fences, no extra text — matching this schema exactly:
+  // ── Pass 2: convert prose to JSON ─────────────────────────────────
+  if (pass === 2) {
+    const { analysis } = body;
+
+    if (typeof analysis !== 'string' || !analysis.trim()) {
+      return error(400, '`analysis` is required for pass 2.');
+    }
+
+    const prompt = `Convert the following deck analysis into JSON. Respond with valid JSON only — no markdown fences, no extra text — matching this schema exactly:
 
 {
   "theme": "<1–2 sentence description of the deck's strategy/theme>",
@@ -114,42 +121,41 @@ Requirements:
 Analysis to convert:
 ${analysis}`;
 
-  let result;
-  try {
-    const { text: rawJson } = await generateText({
-      model:     anthropic('claude-opus-4-6'),
-      prompt:    conversionPrompt,
-      maxTokens: 1024,
-    });
-    result = parseJsonResponse(rawJson);
-  } catch (err) {
-    return handleApiError(err);
+    let result;
+    try {
+      const { text: rawJson } = await generateText({
+        model:     anthropic('claude-haiku-4-5'),
+        prompt,
+        maxTokens: 1024,
+      });
+      result = parseJsonResponse(rawJson);
+    } catch (err) {
+      return handleApiError(err);
+    }
+
+    if (
+      typeof result.theme !== 'string' ||
+      typeof result.analysis !== 'string' ||
+      !Array.isArray(result.recommendations)
+    ) {
+      return error(502, 'AI response was missing required fields. Please try again.');
+    }
+
+    result.recommendations = result.recommendations
+      .filter(r => typeof r.name === 'string' && r.name.trim())
+      .map(r => ({
+        name:    r.name.trim(),
+        reason:  typeof r.reason === 'string' ? r.reason.trim() : '',
+        role:    typeof r.role   === 'string' ? r.role.trim()   : 'utility',
+        ...(typeof r.replaces === 'string' && r.replaces.trim()
+            ? { replaces: r.replaces.trim() }
+            : {}),
+      }));
+
+    return Response.json(result, { headers: CORS });
   }
 
-  // ── Structural validation ────────────────────────────────────────
-  if (
-    typeof result.theme !== 'string' ||
-    typeof result.analysis !== 'string' ||
-    !Array.isArray(result.recommendations)
-  ) {
-    return error(502, 'AI response was missing required fields. Please try again.');
-  }
-
-  // Sanitise each recommendation
-  result.recommendations = result.recommendations
-    .filter(r => typeof r.name === 'string' && r.name.trim())
-    .map(r => ({
-      name:    r.name.trim(),
-      reason:  typeof r.reason === 'string' ? r.reason.trim() : '',
-      role:    typeof r.role   === 'string' ? r.role.trim()   : 'utility',
-      ...(typeof r.replaces === 'string' && r.replaces.trim()
-          ? { replaces: r.replaces.trim() }
-          : {}),
-    }));
-
-  return Response.json(result, {
-    headers: { 'Content-Type': 'application/json', ...CORS },
-  });
+  return error(400, '`pass` must be 1 or 2.');
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -169,7 +175,6 @@ function handleApiError(err) {
   return error(502, 'AI service error. Please try again.');
 }
 
-/** Parse JSON from Claude's response, stripping markdown fences if present. */
 function parseJsonResponse(raw) {
   try { return JSON.parse(raw); } catch {}
 
