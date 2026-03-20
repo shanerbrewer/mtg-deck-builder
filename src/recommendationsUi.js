@@ -27,12 +27,74 @@ const ROLE_COLORS = {
   'utility':      '#887766',
 };
 
+// ── Floating card preview (singleton) ───────────────────────────────
+
+let previewEl  = null;
+let hideTimer  = null;
+
+function getPreviewEl() {
+  if (!previewEl) {
+    previewEl = document.createElement('div');
+    previewEl.className = 'ai-card-preview';
+    previewEl.hidden = true;
+
+    const img = document.createElement('img');
+    img.className = 'ai-card-preview-img';
+    img.alt = '';
+    // Hide preview if the image fails to load (e.g. unknown card name)
+    img.addEventListener('error', () => { previewEl.hidden = true; });
+
+    previewEl.appendChild(img);
+    document.body.appendChild(previewEl);
+  }
+  return previewEl;
+}
+
+function showPreview(cardName, anchorEl) {
+  clearTimeout(hideTimer);
+
+  const preview = getPreviewEl();
+  const img     = preview.querySelector('img');
+
+  const url = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cardName)}&format=image&version=normal`;
+  if (img.dataset.card !== cardName) {
+    img.dataset.card = cardName;
+    img.src = url;
+  }
+
+  // Position: prefer right of anchor; fall back to left if near right edge
+  const rect       = anchorEl.getBoundingClientRect();
+  const PAD        = 12;
+  const PW         = 220; // preview width (matches CSS)
+
+  let left = rect.right + PAD;
+  let top  = rect.top;
+
+  if (left + PW > window.innerWidth - PAD) {
+    left = rect.left - PW - PAD;
+  }
+  // Keep inside vertical viewport
+  const PH    = 308; // approx card height at normal size
+  const maxTop = window.innerHeight - PH - PAD;
+  top = Math.max(PAD, Math.min(top, maxTop));
+
+  preview.style.left = `${left}px`;
+  preview.style.top  = `${top}px`;
+  preview.hidden = false;
+}
+
+function scheduleHidePreview() {
+  hideTimer = setTimeout(() => {
+    if (previewEl) previewEl.hidden = true;
+  }, 120);
+}
+
 // ── Public API ───────────────────────────────────────────────────────
 
 /**
  * Show the initial "Get AI Picks" call-to-action.
  * @param {HTMLElement} panelEl
- * @param {() => void}  onFetch  — called when the user clicks the button
+ * @param {() => void}  onFetch
  */
 export function renderAiPrompt(panelEl, onFetch) {
   panelEl.textContent = '';
@@ -99,11 +161,12 @@ export function renderAiError(panelEl, message, onRetry) {
 
 /**
  * Render AI recommendations.
- * @param {HTMLElement} panelEl
- * @param {object}      data   — { theme, analysis, recommendations[] }
- * @param {() => void}  onRefetch — called when user clicks "Refresh"
+ * @param {HTMLElement}          panelEl
+ * @param {object}               data        — { theme, analysis, recommendations[] }
+ * @param {() => void}           onRefetch   — called when user clicks "Refresh"
+ * @param {(name: string) => void} onAccept  — called when user accepts a card
  */
-export function renderRecommendations(panelEl, data, onRefetch) {
+export function renderRecommendations(panelEl, data, onRefetch, onAccept) {
   panelEl.textContent = '';
 
   // ── Header: theme + analysis ──────────────────────────────────
@@ -142,14 +205,14 @@ export function renderRecommendations(panelEl, data, onRefetch) {
 
   const grid = el('div', 'ai-recs-grid');
   for (const rec of (data.recommendations ?? [])) {
-    grid.appendChild(buildRecCard(rec));
+    grid.appendChild(buildRecCard(rec, onAccept));
   }
   panelEl.appendChild(grid);
 }
 
 // ── Private helpers ──────────────────────────────────────────────────
 
-function buildRecCard(rec) {
+function buildRecCard(rec, onAccept) {
   const card = el('div', 'ai-rec-card');
 
   // Role badge
@@ -159,10 +222,15 @@ function buildRecCard(rec) {
   badge.style.setProperty('--role-color', ROLE_COLORS[role] ?? '#887766');
   card.appendChild(badge);
 
-  // Card name
+  // Card name — hovering shows the Scryfall card image
   const nameEl = el('h4', 'ai-rec-name');
   nameEl.textContent = rec.name ?? '';
+  nameEl.title = 'Hover to preview card';
   card.appendChild(nameEl);
+
+  // Hover preview on the whole card
+  card.addEventListener('mouseenter', () => showPreview(rec.name, card));
+  card.addEventListener('mouseleave', scheduleHidePreview);
 
   // Reason
   const reasonEl = el('p', 'ai-rec-reason');
@@ -179,6 +247,29 @@ function buildRecCard(rec) {
     append(replacesEl, [replacesLabel, replacesName]);
     card.appendChild(replacesEl);
   }
+
+  // ── Accept button ──────────────────────────────────────────────
+  const footer = el('div', 'ai-rec-footer');
+
+  const acceptBtn = el('button', 'btn ai-accept-btn');
+  acceptBtn.textContent = '+ Add to Deck';
+  acceptBtn.addEventListener('click', () => {
+    if (card.classList.contains('ai-rec-accepted')) return;
+
+    // Mark as accepted
+    card.classList.add('ai-rec-accepted');
+    acceptBtn.textContent = '✓ Added';
+    acceptBtn.disabled = true;
+
+    // Hide preview for this card
+    scheduleHidePreview();
+
+    // Notify parent
+    if (typeof onAccept === 'function') onAccept(rec.name, rec.replaces ?? null);
+  });
+
+  footer.appendChild(acceptBtn);
+  card.appendChild(footer);
 
   return card;
 }

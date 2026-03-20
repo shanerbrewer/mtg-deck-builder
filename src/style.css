@@ -1434,3 +1434,107 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── AI rec card: footer + accept button ── */
+
+.ai-rec-card {
+  /* Flex column so footer sticks to bottom */
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-rec-reason {
+  flex: 1; /* push footer down */
+}
+
+.ai-rec-footer {
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+
+.ai-accept-btn {
+  width: 100%;
+  padding: 0.45rem 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
+  color: var(--accent-gold);
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 30%, transparent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.ai-accept-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-gold) 22%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 55%, transparent);
+}
+
+/* Accepted state */
+.ai-rec-card.ai-rec-accepted {
+  opacity: 0.55;
+}
+
+.ai-rec-card.ai-rec-accepted .ai-accept-btn {
+  background: color-mix(in srgb, #44aa55 12%, transparent);
+  color: #44aa55;
+  border-color: color-mix(in srgb, #44aa55 30%, transparent);
+  cursor: default;
+}
+
+/* ── Floating card preview ── */
+
+.ai-card-preview {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  width: 220px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+  transition: opacity 120ms ease;
+}
+
+.ai-card-preview[hidden] {
+  display: none !important;
+}
+
+.ai-card-preview-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+}
+
+/* ── Accept toast notification ── */
+
+.accept-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(0.5rem);
+  background: var(--bg-panel);
+  border: 1px solid #44aa55;
+  color: var(--text-primary);
+  padding: 0.6rem 1.25rem;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  z-index: 9998;
+  opacity: 0;
+  transition: opacity 200ms ease, transform 200ms ease;
+  white-space: nowrap;
+}
+
+.accept-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.accept-toast-check {
+  color: #44aa55;
+  font-weight: 700;
+}

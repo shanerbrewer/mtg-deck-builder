@@ -77,7 +77,7 @@ function switchTab(tab) {
   // When switching to AI tab, show cached result or prompt
   if (tab === 'ai' && aiPanel) {
     if (aiRecommendations) {
-      renderRecommendations(aiPanel, aiRecommendations, fetchAiRecommendations);
+      renderRecommendations(aiPanel, aiRecommendations, fetchAiRecommendations, handleAcceptRecommendation);
     } else if (currentParsed) {
       renderAiPrompt(aiPanel, fetchAiRecommendations);
     }
@@ -278,7 +278,7 @@ async function fetchAiRecommendations() {
     }
 
     aiRecommendations = data;
-    renderRecommendations(aiPanel, data, fetchAiRecommendations);
+    renderRecommendations(aiPanel, data, fetchAiRecommendations, handleAcceptRecommendation);
 
   } catch (err) {
     renderAiError(
@@ -289,6 +289,67 @@ async function fetchAiRecommendations() {
   } finally {
     aiFetching = false;
   }
+}
+
+/**
+ * Called when the user accepts an AI recommendation.
+ * Appends the card to the decklist textarea and saves.
+ * If a "replaces" card was given, removes it from the list first.
+ *
+ * @param {string}      cardName   — card to add
+ * @param {string|null} replaces   — card to remove (optional)
+ */
+function handleAcceptRecommendation(cardName, replaces) {
+  let text = decklistTextarea.value;
+
+  // Remove the "replaces" card if specified and it exists in the list
+  if (replaces) {
+    // Match lines like "1 Card Name", "1x Card Name", "1 Card Name (SET) 123"
+    const escapedName = replaces.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const lineRe = new RegExp(`^\\d+[xX]?\\s+${escapedName}(?:\\s+\\([A-Z0-9]{2,5}\\)\\s+\\d+)?\\s*$`, 'im');
+    if (lineRe.test(text)) {
+      text = text.replace(lineRe, '').replace(/\n{3,}/g, '\n\n').trimEnd();
+    }
+  }
+
+  // Append the new card
+  text = text.trimEnd() + '\n1 ' + cardName;
+  decklistTextarea.value = text;
+
+  saveDeck(text, deckNameInput.value);
+
+  // Show a brief toast notification
+  showAcceptToast(cardName);
+}
+
+/** Show a brief "Card added" toast message. */
+function showAcceptToast(cardName) {
+  const existing = document.getElementById('accept-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'accept-toast';
+  toast.className = 'accept-toast';
+
+  const check = document.createElement('span');
+  check.textContent = '✓ ';
+  check.className = 'accept-toast-check';
+
+  const name = document.createElement('span');
+  name.textContent = cardName + ' added to deck';
+
+  toast.appendChild(check);
+  toast.appendChild(name);
+  document.body.appendChild(toast);
+
+  // Animate in
+  requestAnimationFrame(() => toast.classList.add('accept-toast--visible'));
+
+  // Remove after 2.5 s
+  setTimeout(() => {
+    toast.classList.remove('accept-toast--visible');
+    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+  }, 2500);
 }
 
 // ── Clear Deck ────────────────────────────────────────────────────
