@@ -81,7 +81,7 @@ Analyse this deck's strategy and identify 6 cards that would meaningfully improv
       const { text: analysis } = await generateText({
         model:     anthropic('claude-opus-4-6'),
         prompt,
-        maxTokens: 1100,
+        maxTokens: 800,
       });
       return Response.json({ analysis }, { headers: CORS });
     } catch (err) {

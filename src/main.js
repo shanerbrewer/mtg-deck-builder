@@ -257,8 +257,13 @@ function renderAnalyticsPanelIfLoaded(parsed, cardMap) {
 async function fetchAiRecommendations() {
   if (aiFetching || !currentParsed || !aiPanel) return;
 
-  const text     = decklistTextarea.value.trim();
   const deckName = deckNameInput.value.trim();
+
+  // Build a compact decklist from parsed entries — strips set codes, collector
+  // numbers, section headers, and other metadata to minimise input tokens.
+  const text = currentParsed.entries
+    .map(({ quantity, name }) => `${quantity} ${name}`)
+    .join('\n');
 
   aiFetching = true;
   renderAiLoading(aiPanel, 'Claude is analysing your deck…');
