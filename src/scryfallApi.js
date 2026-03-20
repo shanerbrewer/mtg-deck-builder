@@ -46,9 +46,27 @@ async function fetchBatch(names) {
 
   const found = new Map();
   for (const card of (data.data ?? [])) {
-    // Index by the name as returned by Scryfall (canonical) AND by the name
-    // we requested, so partial matches still resolve.
     found.set(card.name, card);
+  }
+
+  // Adventure cards (and other multi-name layouts) have canonical names like
+  // "Cast Off // Realm-Cloaked Giant". If the user typed either half, the
+  // canonical-name key won't match the decklist lookup — re-index by each
+  // requested name that didn't land in the map.
+  for (const requestedName of names) {
+    if (found.has(requestedName)) continue;
+    for (const card of found.values()) {
+      // Match either side of a " // " canonical name
+      if (card.name.split(' // ').includes(requestedName)) {
+        found.set(requestedName, card);
+        break;
+      }
+      // Fallback: match against individual card_faces names
+      if (card.card_faces?.some(f => f.name === requestedName)) {
+        found.set(requestedName, card);
+        break;
+      }
+    }
   }
 
   // not_found entries look like { object: 'card', name: 'Bad Name' }
