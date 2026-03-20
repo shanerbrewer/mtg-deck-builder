@@ -271,7 +271,13 @@ async function fetchAiRecommendations() {
       body:    JSON.stringify({ pass: 1, text, deckName }),
     });
 
-    const data1 = await res1.json();
+    let data1;
+    try {
+      data1 = await res1.json();
+    } catch {
+      renderAiError(aiPanel, `Server error (${res1.status}) — response was not JSON. The request may have timed out.`, fetchAiRecommendations);
+      return;
+    }
 
     if (!res1.ok) {
       renderAiError(aiPanel, data1?.error ?? `Server error (${res1.status}).`, fetchAiRecommendations);
@@ -287,7 +293,13 @@ async function fetchAiRecommendations() {
       body:    JSON.stringify({ pass: 2, analysis: data1.analysis }),
     });
 
-    const data2 = await res2.json();
+    let data2;
+    try {
+      data2 = await res2.json();
+    } catch {
+      renderAiError(aiPanel, `Server error (${res2.status}) — response was not JSON. The request may have timed out.`, fetchAiRecommendations);
+      return;
+    }
 
     if (!res2.ok) {
       renderAiError(aiPanel, data2?.error ?? `Server error (${res2.status}).`, fetchAiRecommendations);
@@ -300,7 +312,7 @@ async function fetchAiRecommendations() {
   } catch (err) {
     renderAiError(
       aiPanel,
-      'Could not reach the recommendations service. Check your network and try again.',
+      `Network error: ${err?.message ?? 'Could not reach the recommendations service.'}`,
       fetchAiRecommendations,
     );
   } finally {
