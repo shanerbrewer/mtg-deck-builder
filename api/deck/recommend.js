@@ -75,7 +75,7 @@ Here is a Commander deck${nameHint}:
 
 ${text}
 
-Analyse this deck's strategy and identify 6 cards that would meaningfully improve it. For each recommendation, explain why the card fits the deck, what strategic role it fills, and which card already in the deck it could replace (if there is a clear candidate).`;
+Analyse this deck's strategy and identify 6 cards that would meaningfully improve it. For each recommendation, explain why the card fits the deck, what strategic role it fills, and which specific card already in the deck it should replace.`;
 
     try {
       const { text: analysis } = await generateText({
@@ -107,7 +107,7 @@ Analyse this deck's strategy and identify 6 cards that would meaningfully improv
       "name": "<exact MTG card name, spelled correctly>",
       "reason": "<1–2 sentences on why this card improves the deck>",
       "role": "<one of: ramp, draw, removal, counterspell, board-wipe, tutor, synergy, utility>",
-      "replaces": "<exact name of a card in the deck this replaces — omit the field entirely if none was suggested>"
+      "replaces": "<exact name of the card in the deck this replaces>"
     }
   ]
 }
@@ -115,7 +115,7 @@ Analyse this deck's strategy and identify 6 cards that would meaningfully improv
 Requirements:
 - Exactly 6 entries in recommendations.
 - role must be one of the listed values; choose the closest match.
-- Include "replaces" only when the analysis explicitly names a card to cut.
+- "replaces" is required for every entry — always include it.
 - Card names must be spelled exactly as they appear in the analysis.
 
 Analysis to convert:
